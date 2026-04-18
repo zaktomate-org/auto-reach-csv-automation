@@ -1,8 +1,0 @@
-{
-  "track_id": "dynamic_folder_processing_20260418",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-04-18T12:00:00Z",
-  "updated_at": "2026-04-18T12:00:00Z",
-  "description": "core srcipt is ready and no need for the change there. now make it so even if i change the folder name from unprocessed to anything else it should search for all the csv files in it and ingore all the other files and also it should create a tracker file so it does not process the same file again"
-}
