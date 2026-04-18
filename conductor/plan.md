@@ -2,7 +2,7 @@
 
 ## Phase 1: Core Logic Enhancements
 
-- [~] Task: Implement Dynamic Folder Selection
+- [x] Task: Implement Dynamic Folder Selection (c5304ed)
     - [ ] Write Tests: Verify script can accept and validate custom folder names
     - [ ] Implement Feature: Update `setup_directories` to use dynamic input
 - [ ] Task: Implement File Filtering

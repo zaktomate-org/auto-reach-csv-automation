@@ -1,0 +1,17 @@
+# Data files
+*.csv
+gmapsdata/
+unprocessed/
+processed/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Conductor
+.conductor_cache/
