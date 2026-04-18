@@ -4,6 +4,7 @@ import sys
 import string
 from pathlib import Path
 import pandas as pd
+from crm_client import CRMClient
 
 def setup_directories(input_folder: str = 'unprocessed') -> tuple[Path, Path]:
     """Ensures input and output directories exist."""
@@ -124,7 +125,7 @@ def main_with_args(args):
             continue
             
         try:
-            df = pd.read_csv(filepath)
+            df = pd.read_csv(filepath, dtype={'phone': str})
         except pd.errors.EmptyDataError:
             tracker.add(filepath.name)
             continue  # Gracefully skip completely empty files
@@ -156,8 +157,8 @@ def main_with_args(args):
         # ---------------------------------------------------------
         # Step 3.2: Filtering Logic (Validation & Rejection)
         # ---------------------------------------------------------
-        # Strip all whitespace from phones so matching is highly robust
-        phone_series = df['phone'].astype(str).str.strip().str.replace(r'\s+', '', regex=True)
+        # Strip all whitespace and dashes from phones so matching is highly robust
+        phone_series = df['phone'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
         
         # Check if phone is genuinely null/empty
         phone_is_empty = df['phone'].isna() | phone_series.str.lower().isin(['', 'nan', 'none', '<na>'])
@@ -206,6 +207,36 @@ def main_with_args(args):
         final_df.to_csv(output_filepath, index=False)
         tracker.add(filepath.name)
         print(f"Successfully processed: {filepath.name} (Kept {len(final_df)} / Rejected {len(rejects_df)})")
+
+        # ---------------------------------------------------------
+        # Phase 3: CRM Synchronization (Conditional)
+        # ---------------------------------------------------------
+        if hasattr(args, 'crm') and args.crm:
+            crm_client = CRMClient(args.url, args.type, args.sentby)
+            print(f"Starting CRM sync for {filepath.name}...")
+            
+            for index, row in final_df.iterrows():
+                phone = str(row['phone']).strip()
+                if not phone or phone.lower() in ['nan', 'none', '']:
+                    continue
+                
+                try:
+                    # Step A: Check Existing Entry
+                    if crm_client.check_number(phone):
+                        print(f"  Skipping {phone}: Match found in CRM")
+                        continue
+                    
+                    # Step B: Create New Entry
+                    if crm_client.create_entry(row):
+                        print(f"  Created entry for {row['Company Name']} ({phone})")
+                    else:
+                        print(f"  Failed to create entry for {row['Company Name']} ({phone})")
+                        
+                except Exception as e:
+                    print(f"  Error syncing row {index} ({phone}): {e}")
+                    # Resilient: continue to next row
+            
+            print(f"CRM sync complete for {filepath.name}.")
 
 def main():
     # Allow dynamic input folder from command line
