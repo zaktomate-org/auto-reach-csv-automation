@@ -108,6 +108,9 @@ def main():
     root_dir = Path.cwd()
     master_all_path = root_dir / 'all.csv'
     master_rejects_path = root_dir / 'rejects.csv'
+    tracker_path = root_dir / 'processed_files.txt'
+    
+    tracker = FileTracker(tracker_path)
     
     # Columns requested for Master / Rejects archive
     log_cols =['link', 'title', 'category', 'address', 'website', 'phone', 'timezone', 'emails']
@@ -117,15 +120,20 @@ def main():
     phone_pattern = r'^(?:\+88)?01\d{3}-?\d{6}$'
 
     for filepath in get_input_files(unprocessed_dir):
+        if tracker.is_processed(filepath.name):
+            continue
+            
         try:
             df = pd.read_csv(filepath)
         except pd.errors.EmptyDataError:
+            tracker.add(filepath.name)
             continue  # Gracefully skip completely empty files
         except Exception as e:
             print(f"Error reading {filepath.name}: {e}")
             continue
 
         if df.empty:
+            tracker.add(filepath.name)
             continue
 
         # ---------------------------------------------------------
@@ -196,6 +204,7 @@ def main():
         # ---------------------------------------------------------
         output_filepath = processed_dir / filepath.name
         final_df.to_csv(output_filepath, index=False)
+        tracker.add(filepath.name)
         print(f"Successfully processed: {filepath.name} (Kept {len(final_df)} / Rejected {len(rejects_df)})")
 
 if __name__ == "__main__":

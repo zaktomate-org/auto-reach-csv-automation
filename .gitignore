@@ -3,6 +3,7 @@
 gmapsdata/
 unprocessed/
 processed/
+processed_files.txt
 
 # Python
 __pycache__/
