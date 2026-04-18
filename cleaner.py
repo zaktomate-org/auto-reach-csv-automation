@@ -25,6 +25,30 @@ def get_input_files(input_dir: Path) -> list[Path]:
     """Returns a list of CSV files to process."""
     return [f for f in input_dir.glob('*.csv') if f.is_file()]
 
+class FileTracker:
+    """Tracks processed files to avoid redundant work."""
+    def __init__(self, tracker_path: Path):
+        self.path = tracker_path
+        self.processed_files = self._load()
+
+    def _load(self) -> set[str]:
+        if not self.path.exists():
+            return set()
+        with open(self.path, 'r') as f:
+            return {line.strip() for line in f if line.strip()}
+
+    def _save(self):
+        with open(self.path, 'w') as f:
+            for filename in sorted(self.processed_files):
+                f.write(f"{filename}\n")
+
+    def is_processed(self, filename: str) -> bool:
+        return filename in self.processed_files
+
+    def add(self, filename: str):
+        self.processed_files.add(filename)
+        self._save()
+
 def clean_company_name(name: str) -> str:
     """
     Trims the company name and removes all characters following (and including) 
