@@ -12,15 +12,15 @@ Refactor `main.py` to use `argparse` with named flags instead of positional argu
     - [ ] Update any internal references to arguments
 - [x] Task: Conductor - User Manual Verification 'Phase 1: CLI Refactoring' (Protocol in workflow.md) [a365bac]
 
-## Phase 2: CRM Integration Module
+## Phase 2: CRM Integration Module [checkpoint: 5329ea2]
 Develop a dedicated module to handle communication with the CRM API.
 
-- [ ] Task: Create CRM Client Module
+- [x] Task: Create CRM Client Module [7133bf4]
     - [ ] Write tests for CRM "check" and "entry" API calls (mocking responses)
     - [ ] Write tests for the 3-retry logic and 12-hour time formatting
     - [ ] Implement `CRMClient` class with methods for `check_number` and `create_entry`
     - [ ] Implement 12-hour time formatting for the `sentIn` field
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: CRM Integration Module' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: CRM Integration Module' (Protocol in workflow.md) [5329ea2]
 
 ## Phase 3: Workflow Integration & Logging
 Integrate the CRM module into the main processing loop and add detailed logging.
