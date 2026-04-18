@@ -8,9 +8,11 @@ A Python-based tool for cleaning and deduplicating company data from CSV files.
 
 ## Core Features
 - **Dynamic Batch CSV Processing:** Automated ingestion of CSV files from a user-specified directory, processing them, and saving results to a `processed` directory.
+- **CLI Flag Control:** Refactored command-line interface with named flags (`--path`, `--url`, `--crm`, etc.) for flexible configuration.
 - **Idempotent File Tracking:** A persistent tracking system ensures each file is only processed once, even if it remains in the input directory.
 - **Company Name Cleaning:** Standardizing company names by removing unnecessary punctuation and whitespace while maintaining a minimum character threshold to preserve context.
 - **Phone Number Validation:** Identifying and validating specific phone number patterns (e.g., `+8801...`) to ensure data accuracy.
+- **CRM Synchronization:** Optional automated synchronization of cleaned data to an external CRM API with built-in retry logic and duplicate checking.
 
 ## Primary Goal
 - **Workflow Automation:** The single most important goal is to automate the entire data cleaning workflow, from initial file ingestion to archiving and deduplication, to save time and reduce manual errors.

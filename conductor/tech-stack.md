@@ -5,6 +5,7 @@
 
 ## Core Libraries
 - **pandas:** The primary library for data manipulation, cleaning, and CSV processing. It provides high-performance, easy-to-use data structures.
+- **requests:** Used for making HTTP requests to the CRM API for synchronization.
 - **pathlib:** Used for modern, object-oriented filesystem path manipulation.
 - **re (Regex):** Used for string cleaning and validation (e.g., phone numbers and company names).
 
