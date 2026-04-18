@@ -7,7 +7,8 @@ A Python-based tool for cleaning and deduplicating company data from CSV files.
 - **Sales Teams:** Marketing teams and sales professionals who need to manage and clean lead lists for various campaigns.
 
 ## Core Features
-- **Batch CSV Processing:** Automated ingestion of CSV files from an `unprocessed` directory, processing them, and moving results to a `processed` directory.
+- **Dynamic Batch CSV Processing:** Automated ingestion of CSV files from a user-specified directory, processing them, and saving results to a `processed` directory.
+- **Idempotent File Tracking:** A persistent tracking system ensures each file is only processed once, even if it remains in the input directory.
 - **Company Name Cleaning:** Standardizing company names by removing unnecessary punctuation and whitespace while maintaining a minimum character threshold to preserve context.
 - **Phone Number Validation:** Identifying and validating specific phone number patterns (e.g., `+8801...`) to ensure data accuracy.
 

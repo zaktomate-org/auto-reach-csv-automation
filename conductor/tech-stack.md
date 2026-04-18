@@ -10,6 +10,8 @@
 
 ## Tools & Package Management
 - **uv:** A fast Python package installer and resolver, used for managing dependencies and the virtual environment.
+- **pytest:** A mature, full-featured Python testing tool used for unit and integration testing.
+- **pytest-cov:** A pytest plugin that produces coverage reports.
 
 ## Infrastructure & Deployment
 - **Filesystem-based Processing:** The tool operates on local directories (`unprocessed`, `processed`) and CSV files, ensuring a zero-infrastructure footprint.
