@@ -100,9 +100,9 @@ def append_rejects(df: pd.DataFrame, path: Path):
     else:
         df.drop_duplicates().to_csv(path, index=False)
 
-def main():
-    # Allow dynamic input folder from command line
-    input_folder = sys.argv[1] if len(sys.argv) > 1 else 'unprocessed'
+def main_with_args(args):
+    # Allow dynamic input folder from command line via argparse path
+    input_folder = args.path
     unprocessed_dir, processed_dir = setup_directories(input_folder)
     
     root_dir = Path.cwd()
@@ -206,6 +206,16 @@ def main():
         final_df.to_csv(output_filepath, index=False)
         tracker.add(filepath.name)
         print(f"Successfully processed: {filepath.name} (Kept {len(final_df)} / Rejected {len(rejects_df)})")
+
+def main():
+    # Allow dynamic input folder from command line
+    input_folder = sys.argv[1] if len(sys.argv) > 1 else 'unprocessed'
+    
+    class Args:
+        pass
+    args = Args()
+    args.path = input_folder
+    main_with_args(args)
 
 if __name__ == "__main__":
     main()
