@@ -5,7 +5,7 @@
 - [x] Task: Implement Dynamic Folder Selection (c5304ed)
     - [ ] Write Tests: Verify script can accept and validate custom folder names
     - [ ] Implement Feature: Update `setup_directories` to use dynamic input
-- [ ] Task: Implement File Filtering
+- [~] Task: Implement File Filtering
     - [ ] Write Tests: Verify only `.csv` files are selected for processing
     - [ ] Implement Feature: Refine globbing/filtering logic in `main` loop
 - [ ] Task: Conductor - User Manual Verification 'Core Logic Enhancements' (Protocol in workflow.md)

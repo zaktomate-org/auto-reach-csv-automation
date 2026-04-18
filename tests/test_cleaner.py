@@ -1,7 +1,24 @@
 import pytest
 from pathlib import Path
-from cleaner import setup_directories
+from cleaner import setup_directories, get_input_files
 import os
+
+def test_get_input_files(tmp_path):
+    # Setup: Create some files
+    (tmp_path / "test1.csv").write_text("col1,col2\n1,2")
+    (tmp_path / "test2.csv").write_text("col1,col2\n3,4")
+    (tmp_path / "not_csv.txt").write_text("hello")
+    (tmp_path / "subdir").mkdir()
+    (tmp_path / "subdir/inner.csv").write_text("inner")
+    
+    files = get_input_files(tmp_path)
+    
+    filenames = [f.name for f in files]
+    assert "test1.csv" in filenames
+    assert "test2.csv" in filenames
+    assert "not_csv.txt" not in filenames
+    assert "inner.csv" not in filenames 
+    assert len(files) == 2
 
 def test_setup_directories_default(tmp_path, monkeypatch):
     # Setup: Create 'unprocessed' in tmp_path

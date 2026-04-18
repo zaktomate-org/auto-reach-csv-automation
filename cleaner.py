@@ -21,6 +21,10 @@ def setup_directories(input_folder: str = 'unprocessed') -> tuple[Path, Path]:
     processed_dir.mkdir(exist_ok=True)
     return unprocessed_dir, processed_dir
 
+def get_input_files(input_dir: Path) -> list[Path]:
+    """Returns a list of CSV files to process."""
+    return [f for f in input_dir.glob('*.csv') if f.is_file()]
+
 def clean_company_name(name: str) -> str:
     """
     Trims the company name and removes all characters following (and including) 
@@ -88,10 +92,7 @@ def main():
     # then 3 digits, an optional dash, and 6 digits.
     phone_pattern = r'^(?:\+88)?01\d{3}-?\d{6}$'
 
-    for filepath in unprocessed_dir.glob('*.csv'):
-        if not filepath.is_file():
-            continue
-            
+    for filepath in get_input_files(unprocessed_dir):
         try:
             df = pd.read_csv(filepath)
         except pd.errors.EmptyDataError:
