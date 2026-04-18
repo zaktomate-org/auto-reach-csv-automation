@@ -22,12 +22,12 @@ Develop a dedicated module to handle communication with the CRM API.
     - [ ] Implement 12-hour time formatting for the `sentIn` field
 - [x] Task: Conductor - User Manual Verification 'Phase 2: CRM Integration Module' (Protocol in workflow.md) [5329ea2]
 
-## Phase 3: Workflow Integration & Logging
+## Phase 3: Workflow Integration & Logging [checkpoint: 0e267fd]
 Integrate the CRM module into the main processing loop and add detailed logging.
 
-- [ ] Task: Integrate CRM Sync into Processing Flow
+- [x] Task: Integrate CRM Sync into Processing Flow [619994e]
     - [ ] Write tests for the end-to-end sync flow using a mock CSV
     - [ ] Implement sequential row-by-row sync after a CSV is saved to `processed/`
     - [ ] Add console logging for sync status (Skip/Success/Failure)
     - [ ] Ensure the script remains resilient to individual row failures
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Integration and End-to-End Sync' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Integration and End-to-End Sync' (Protocol in workflow.md) [0e267fd]
