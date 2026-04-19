@@ -80,29 +80,42 @@ def run_crm_sync(final_df: pd.DataFrame, crm_client: CRMClient) -> bool:
     """Runs CRM sync for all rows. Returns True only if ALL rows complete successfully."""
     total = len(final_df)
     success_count = 0
+    debug = crm_client.debug
 
     for index, row in final_df.iterrows():
         phone = str(row['phone']).strip()
         if phone.endswith('.0'):
             phone = phone[:-2]
-        if not phone or phone.lower() in ['nan', 'none', '']:
-            success_count += 1
+        phone_missing = not phone or phone.lower() in ['nan', 'none', '']
+
+        if phone_missing:
+            try:
+                if crm_client.create_entry_no_phone(row):
+                    if not debug:
+                        print(f"  Created entry (no phone) for {row['Company Name']}")
+                    success_count += 1
+                else:
+                    print(f"  ERROR: Failed to create entry for {row['Company Name']} (no phone)")
+            except Exception as e:
+                print(f"  ERROR: Syncing row {index} (no phone): {e}")
             continue
 
         try:
             if crm_client.check_number(phone):
-                print(f"  Skipping {phone}: Match found in CRM")
+                if not debug:
+                    print(f"  Skipping {phone}: Match found in CRM")
                 success_count += 1
                 continue
 
             if crm_client.create_entry(row):
-                print(f"  Created entry for {row['Company Name']} ({phone})")
+                if not debug:
+                    print(f"  Created entry for {row['Company Name']} ({phone})")
                 success_count += 1
             else:
-                print(f"  Failed to create entry for {row['Company Name']} ({phone})")
+                print(f"  ERROR: Failed to create entry for {row['Company Name']} ({phone})")
 
         except Exception as e:
-            print(f"  Error syncing row {index} ({phone}): {e}")
+            print(f"  ERROR: Syncing row {index} ({phone}): {e}")
 
     return success_count == total
 
@@ -195,7 +208,7 @@ def main_with_args(args):
             final_df = pd.read_csv(processed_dir / filename)
             
             if crm_enabled:
-                crm_client = CRMClient(args.url, args.type, args.sentby)
+                crm_client = CRMClient(args.url, args.type, args.sentby, debug=args.debug)
                 sync_success = run_crm_sync(final_df, crm_client)
                 if sync_success:
                     synced_tracker.add_synced(filename)
@@ -298,7 +311,7 @@ def main_with_args(args):
         # Phase 3: CRM Synchronization (Conditional)
         # ---------------------------------------------------------
         if crm_enabled:
-            crm_client = CRMClient(args.url, args.type, args.sentby)
+            crm_client = CRMClient(args.url, args.type, args.sentby, debug=args.debug)
             print(f"Starting CRM sync for {filename}...")
             
             sync_success = run_crm_sync(final_df, crm_client)

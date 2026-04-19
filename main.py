@@ -9,6 +9,7 @@ def parse_args(args):
     parser.add_argument("--crm", action="store_true", help="Enable the CRM synchronization workflow.")
     parser.add_argument("--type", help="The value for the 'type' field in CRM entries.")
     parser.add_argument("--sentby", help="The value for the 'sentBy' field in CRM entries.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode to show full request/response on errors.")
     
     parsed_args = parser.parse_args(args)
     
