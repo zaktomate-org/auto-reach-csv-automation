@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: the crm syncing is not checking if the number is already in crm or not before adding entry**
+- [x] **Track: the crm syncing is not checking if the number is already in crm or not before adding entry**
 *Link: [./tracks/crm_sync_fix_20260418/](./tracks/crm_sync_fix_20260418/)*

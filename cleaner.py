@@ -191,6 +191,12 @@ def main_with_args(args):
 
         # Clean Company Name
         valid_df['Company Name'] = valid_df['Company Name'].apply(clean_company_name)
+        
+        # Standardize Phone Numbers (Remove dashes and whitespace)
+        # We ensure they are strings first.
+        valid_df['phone'] = valid_df['phone'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
+        # Revert nan strings to empty
+        valid_df['phone'] = valid_df['phone'].replace(['nan', 'None', '<NA>'], '')
 
         # Ensure all required final output columns are present
         for out_col in['Company Name', 'phone', 'website']:

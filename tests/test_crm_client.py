@@ -16,9 +16,9 @@ def test_time_formatting(client):
     assert re.match(r"^(0[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$", formatted_time)
 
 @patch("requests.request")
-def test_check_number_match(mock_request, client):
+def test_check_number_match_quoted(mock_request, client):
     mock_request.return_value.status_code = 200
-    mock_request.return_value.text = "match"
+    mock_request.return_value.text = '"match"'  # Simulated JSON quoted response
     
     assert client.check_number("01712345678") is True
     mock_request.assert_called_once_with("GET", "http://test.com/api/check?number=01712345678")
@@ -26,7 +26,7 @@ def test_check_number_match(mock_request, client):
 @patch("requests.request")
 def test_check_number_not_match(mock_request, client):
     mock_request.return_value.status_code = 200
-    mock_request.return_value.text = "not match"
+    mock_request.return_value.text = '"not match"' # Simulated JSON quoted response
     
     assert client.check_number("01712345678") is False
 

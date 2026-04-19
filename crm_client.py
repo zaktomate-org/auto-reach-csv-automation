@@ -32,17 +32,28 @@ class CRMClient:
         Returns True if 'match', False if 'not match'.
         """
         url = f"{self.base_url}/api/check?number={phone}"
-        response = self._request_with_retry("GET", url)
-        return response.text.strip().lower() == "match"
+        print(f"CRM_CLIENT: Checking number {phone} at {url}")
+        try:
+            response = self._request_with_retry("GET", url)
+            # Strip whitespace and literal double quotes from the response
+            raw_text = response.text.strip()
+            clean_text = raw_text.strip('"').lower()
+            result = clean_text == "match"
+            print(f"CRM_CLIENT: Check result for {phone}: {result} (Raw: '{raw_text}', Cleaned: '{clean_text}')")
+            return result
+        except Exception as e:
+            print(f"CRM_CLIENT: Error checking number {phone}: {e}")
+            raise e
 
     def create_entry(self, row):
         """
         Step B: Create New Entry
         """
         url = f"{self.base_url}/api/entry"
+        phone = row.get("phone", "")
         data = {
             "company": row.get("Company Name", ""),
-            "whatsapp": row.get("phone", ""),
+            "whatsapp": phone,
             "type": self.crm_type,
             "website": row.get("website", ""),
             "facebook": "",
@@ -50,5 +61,12 @@ class CRMClient:
             "sentIn": self.get_formatted_time(),
             "messageSent": "no"
         }
-        response = self._request_with_retry("POST", url, json=data)
-        return response.status_code == 200
+        print(f"CRM_CLIENT: Creating entry for {row.get('Company Name')} ({phone}) at {url}")
+        try:
+            response = self._request_with_retry("POST", url, json=data)
+            success = response.status_code == 200
+            print(f"CRM_CLIENT: Creation {'succeeded' if success else 'failed'} for {phone} (Status: {response.status_code})")
+            return success
+        except Exception as e:
+            print(f"CRM_CLIENT: Error creating entry for {phone}: {e}")
+            raise e
