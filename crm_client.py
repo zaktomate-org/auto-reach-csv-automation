@@ -1,6 +1,9 @@
-import requests
+"""CRM client for synchronizing entries."""
 import time
 from datetime import datetime
+
+import requests
+
 
 class CRMClient:
     def __init__(self, base_url, crm_type, sent_by, debug=False):
@@ -45,7 +48,7 @@ class CRMClient:
         print(f"  [DEBUG] Error: {error}")
 
     def _clean_field(self, value):
-        """Clean field value: return empty string for None/nan/empty, otherwise strip whitespace."""
+        """Clean field value for CRM entry."""
         if value is None:
             return ""
         val_str = str(value).strip()
@@ -65,8 +68,8 @@ class CRMClient:
             raw_text = response.text.strip()
             clean_text = raw_text.strip('"').lower()
             result = clean_text == "match"
-            if self.debug and not result:
-                print(f"  [DEBUG] Check failed: {phone} -> Raw: '{raw_text}'")
+            if self.debug:
+                print(f"  [DEBUG] Check {phone}: '{raw_text}' (matched: {result})")
             return result
         except Exception as e:
             if self.debug:
@@ -94,34 +97,55 @@ class CRMClient:
             success = response.status_code == 200
             if not success:
                 if self.debug:
-                    self._debug_error("POST", url, {"json": data}, f"HTTP {response.status_code}: {response.text}")
-                raise Exception(f"Failed to create entry: HTTP {response.status_code}")
+                    self._debug_error(
+                        "POST", url, {"json": data},
+                        f"HTTP {response.status_code}: {response.text}"
+                    )
+                raise Exception(
+                    f"Failed to create entry: HTTP {response.status_code}"
+                )
             return success
         except Exception as e:
             if self.debug:
                 self._debug_error("POST", url, {"json": data}, e)
             raise e
 
-    def create_entry_no_phone(self, row):
-        """Create entry when phone is empty (for valid timezone fallback)."""
-        url = f"{self.base_url}/api/entry"
-        data = {
-            "company": self._clean_field(row.get("Company Name")),
-            "whatsapp": "",
-            "type": self.crm_type,
-            "website": self._clean_field(row.get("website")),
-            "facebook": "",
-            "sentBy": self.sent_by,
-            "sentIn": self.get_formatted_time(),
-            "messageSent": "no"
-        }
+    def create_entries_batch(self, rows):
+        """Create multiple entries in a single batch request."""
+        url = f"{self.base_url}/api/batch-entry"
+        entries = []
+        for row in rows:
+            phone_raw = row.get("phone", "")
+            phone_str = str(phone_raw).strip().lower() if phone_raw else ""
+            whatsapp = (
+                self.normalize_phone(phone_raw)
+                if phone_str and phone_str not in ("nan", "none", "")
+                else ""
+            )
+            entries.append({
+                "company": self._clean_field(row.get("Company Name")),
+                "whatsapp": whatsapp,
+                "type": self.crm_type,
+                "website": self._clean_field(row.get("website")),
+                "facebook": "",
+                "sentBy": self.sent_by,
+                "sentIn": self.get_formatted_time(),
+                "messageSent": "no"
+            })
+        data = entries
         try:
             response = self._request_with_retry("POST", url, json=data)
             success = response.status_code == 200
             if not success:
                 if self.debug:
-                    self._debug_error("POST", url, {"json": data}, f"HTTP {response.status_code}: {response.text}")
-                raise Exception(f"Failed to create entry: HTTP {response.status_code}")
+                    self._debug_error(
+                        "POST", url, {"json": data},
+                        f"HTTP {response.status_code}: {response.text}"
+                    )
+                raise Exception(
+                    f"Failed to create entries: HTTP {response.status_code} - "
+                    f"Response: {response.text}"
+                )
             return success
         except Exception as e:
             if self.debug:

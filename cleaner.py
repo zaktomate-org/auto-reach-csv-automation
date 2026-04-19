@@ -1,10 +1,18 @@
+"""Data cleaning and CRM synchronization module."""
 import os
 import re
-import sys
 import string
+import sys
 from pathlib import Path
-import pandas as pd
+
+import pandas
+
 from crm_client import CRMClient
+
+LOG_COLS = ['link', 'title', 'category', 'address', 'website', 'phone',
+           'timezone', 'emails']
+PHONE_PATTERN = r'^(?:\+88)?01\d{3}-?\d{6}$'
+
 
 def setup_directories(input_folder: str = 'unprocessed') -> tuple[Path, Path]:
     """Ensures input and output directories exist."""
@@ -14,7 +22,9 @@ def setup_directories(input_folder: str = 'unprocessed') -> tuple[Path, Path]:
     
     # Environment Check
     if not unprocessed_dir.exists() or not unprocessed_dir.is_dir():
-        print(f"Error: '{input_folder}' directory not found at {unprocessed_dir}")
+        print(
+            f"Error: '{input_folder}' directory not found at {unprocessed_dir}"
+        )
         print("Please create it and add your input CSV files.")
         sys.exit(1)
         
@@ -76,11 +86,35 @@ class SyncedFileTracker:
         self._save()
 
 
-def run_crm_sync(final_df: pd.DataFrame, crm_client: CRMClient) -> bool:
-    """Runs CRM sync for all rows. Returns True only if ALL rows complete successfully."""
+def run_crm_sync(
+        final_df: pandas.DataFrame, crm_client: CRMClient
+) -> bool:
+    """Runs CRM sync for all rows using batch processing."""
+    import time
+
     total = len(final_df)
     success_count = 0
     debug = crm_client.debug
+    buffer = []
+    batch_size = 10
+
+    def flush_buffer():
+        nonlocal buffer, success_count
+        if not buffer:
+            return
+        try:
+            if crm_client.create_entries_batch(buffer):
+                success_count += len(buffer)
+                if not debug:
+                    print(
+                        f"  Batch created {len(buffer)} entries"
+                    )
+            else:
+                print(f"  ERROR: Batch creation failed")
+        except Exception as e:
+            print(f"  ERROR: Batch creation failed: {e}")
+        buffer = []
+        time.sleep(1)
 
     for index, row in final_df.iterrows():
         phone = str(row['phone']).strip()
@@ -89,15 +123,13 @@ def run_crm_sync(final_df: pd.DataFrame, crm_client: CRMClient) -> bool:
         phone_missing = not phone or phone.lower() in ['nan', 'none', '']
 
         if phone_missing:
-            try:
-                if crm_client.create_entry_no_phone(row):
-                    if not debug:
-                        print(f"  Created entry (no phone) for {row['Company Name']}")
-                    success_count += 1
-                else:
-                    print(f"  ERROR: Failed to create entry for {row['Company Name']} (no phone)")
-            except Exception as e:
-                print(f"  ERROR: Syncing row {index} (no phone): {e}")
+            buffer.append(row)
+            if not debug:
+                print(
+                    f"  Buffer add (no phone): {row['Company Name']}"
+                )
+            if len(buffer) >= batch_size:
+                flush_buffer()
             continue
 
         try:
@@ -106,33 +138,34 @@ def run_crm_sync(final_df: pd.DataFrame, crm_client: CRMClient) -> bool:
                     print(f"  Skipping {phone}: Match found in CRM")
                 success_count += 1
                 continue
-
-            if crm_client.create_entry(row):
-                if not debug:
-                    print(f"  Created entry for {row['Company Name']} ({phone})")
-                success_count += 1
             else:
-                print(f"  ERROR: Failed to create entry for {row['Company Name']} ({phone})")
-
+                buffer.append(row)
+                if not debug:
+                    print(
+                        f"  Buffer add: {row['Company Name']} ({phone})"
+                    )
+                if len(buffer) >= batch_size:
+                    flush_buffer()
         except Exception as e:
-            print(f"  ERROR: Syncing row {index} ({phone}): {e}")
+            print(f"  ERROR: Checking row {index} ({phone}): {e}")
+            continue
+
+    flush_buffer()
 
     return success_count == total
 
 def clean_company_name(name: str) -> str:
-    """
-    Trims the company name and removes all characters following (and including) 
-    the first instance of ANY punctuation (including unicode typography). 
-    If the resulting string length is <= 3, reverts to the original name.
-    """
-    if pd.isna(name):
+    """Clean company name by truncating at first punctuation."""
+    if pandas.isna(name):
         return ""
     
     original_name = str(name).strip()
     
     # Combine standard ASCII punctuation (!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~)
     # with common web Unicode variants (en-dash, em-dash, and various vertical pipes)
-    extended_punctuation = string.punctuation + "–—│┃｜"
+    extended_punctuation = (
+        string.punctuation + "–—│┃｜"
+    )
     
     # Create a safe regex character class
     punct_pattern = r'[' + re.escape(extended_punctuation) + r']'
@@ -146,27 +179,31 @@ def clean_company_name(name: str) -> str:
         
     return cleaned_name
 
-def append_to_csv(df: pd.DataFrame, path: Path):
+def append_to_csv(df: pandas.DataFrame, path: Path):
     """Appends a dataframe to a CSV file."""
     if df.empty:
         return
     header = not path.exists()
     df.to_csv(path, mode='a', index=False, header=header)
 
-def append_rejects(df: pd.DataFrame, path: Path):
-    """Appends rejects to a central log, ensuring no global duplicates are introduced."""
+def append_rejects(df: pandas.DataFrame, path: Path):
+    """Appends rejects to a central log, ensuring no global duplicates."""
     if df.empty:
         return
     if path.exists():
         try:
             # Read existing rejects to prevent cross-run duplicates
-            existing_df = pd.read_csv(path)
-            combined_df = pd.concat([existing_df, df], ignore_index=True)
+            existing_df = pandas.read_csv(path)
+            combined_df = pandas.concat([existing_df, df], ignore_index=True)
             combined_df = combined_df.drop_duplicates()
             combined_df.to_csv(path, index=False)
         except Exception as e:
-            print(f"Warning: Could not deduplicate against {path.name} cleanly (Error: {e}). Fallback to standard append.")
-            df.drop_duplicates().to_csv(path, mode='a', index=False, header=False)
+            print(
+                f"Warning: Could not deduplicate against {path.name} "
+                f"cleanly (Error: {e}). Fallback to standard append."
+            )
+            df.drop_duplicates().to_csv(path, mode='a', index=False,
+                                        header=False)
     else:
         df.drop_duplicates().to_csv(path, index=False)
 
@@ -183,13 +220,6 @@ def main_with_args(args):
     
     tracker = FileTracker(tracker_path)
     synced_tracker = SyncedFileTracker(synced_tracker_path)
-    
-    # Columns requested for Master / Rejects archive
-    log_cols =['link', 'title', 'category', 'address', 'website', 'phone', 'timezone', 'emails']
-    
-    # Regex pattern: optionally starts with +88 or +880 (the `(?:\+88)?01` covers both), 
-    # then 3 digits, an optional dash, and 6 digits.
-    phone_pattern = r'^(?:\+88)?01\d{3}-?\d{6}$'
 
     for filepath in get_input_files(unprocessed_dir):
         filename = filepath.name
@@ -205,7 +235,7 @@ def main_with_args(args):
                 print(f"Skipping {filename}: already processed (use --crm to sync)")
                 continue
             print(f"Resuming CRM sync for {filename}...")
-            final_df = pd.read_csv(processed_dir / filename)
+            final_df = pandas.read_csv(processed_dir / filename)
             
             if crm_enabled:
                 crm_client = CRMClient(args.url, args.type, args.sentby, debug=args.debug)
@@ -218,8 +248,8 @@ def main_with_args(args):
             continue
             
         try:
-            df = pd.read_csv(filepath, dtype={'phone': str})
-        except pd.errors.EmptyDataError:
+            df = pandas.read_csv(filepath, dtype={'phone': str})
+        except pandas.errors.EmptyDataError:
             tracker.add(filepath.name)
             continue  # Gracefully skip completely empty files
         except Exception as e:
@@ -236,15 +266,15 @@ def main_with_args(args):
         df = df.drop_duplicates()
 
         # Ensure all required columns exist natively to prevent KeyErrors
-        for col in log_cols:
+        for col in LOG_COLS:
             if col not in df.columns:
-                df[col] = pd.NA
+                df[col] = pandas.NA
 
         # ---------------------------------------------------------
         # Step 5.3: Master Archive Logging
         # ---------------------------------------------------------
         # Append every row (before any validation filters)
-        all_log_df = df[log_cols].copy()
+        all_log_df = df[LOG_COLS].copy()
         append_to_csv(all_log_df, master_all_path)
 
         # ---------------------------------------------------------
@@ -257,7 +287,7 @@ def main_with_args(args):
         phone_is_empty = df['phone'].isna() | phone_series.str.lower().isin(['', 'nan', 'none', '<na>'])
         
         # Validation checks
-        valid_phone = phone_series.str.match(phone_pattern)
+        valid_phone = phone_series.str.match(PHONE_PATTERN)
         valid_timezone = df['timezone'] == 'Asia/Dhaka'
         
         # Sequential Logic Application:
@@ -271,7 +301,7 @@ def main_with_args(args):
         # Step 5.2: Rejects Logging
         # ---------------------------------------------------------
         if not rejects_df.empty:
-            rejects_log_df = rejects_df[log_cols].copy()
+            rejects_log_df = rejects_df[LOG_COLS].copy()
             append_rejects(rejects_log_df, master_rejects_path)
 
         # ---------------------------------------------------------
