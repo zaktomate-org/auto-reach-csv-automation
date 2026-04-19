@@ -83,6 +83,8 @@ def run_crm_sync(final_df: pd.DataFrame, crm_client: CRMClient) -> bool:
 
     for index, row in final_df.iterrows():
         phone = str(row['phone']).strip()
+        if phone.endswith('.0'):
+            phone = phone[:-2]
         if not phone or phone.lower() in ['nan', 'none', '']:
             success_count += 1
             continue
