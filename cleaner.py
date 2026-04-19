@@ -50,6 +50,60 @@ class FileTracker:
         self.processed_files.add(filename)
         self._save()
 
+
+class SyncedFileTracker:
+    """Tracks files that have been fully synced to CRM."""
+    def __init__(self, tracker_path: Path):
+        self.path = tracker_path
+        self.synced_files = self._load()
+
+    def _load(self) -> set[str]:
+        if not self.path.exists():
+            return set()
+        with open(self.path, 'r') as f:
+            return {line.strip() for line in f if line.strip()}
+
+    def _save(self):
+        with open(self.path, 'w') as f:
+            for filename in sorted(self.synced_files):
+                f.write(f"{filename}\n")
+
+    def is_synced(self, filename: str) -> bool:
+        return filename in self.synced_files
+
+    def add_synced(self, filename: str):
+        self.synced_files.add(filename)
+        self._save()
+
+
+def run_crm_sync(final_df: pd.DataFrame, crm_client: CRMClient) -> bool:
+    """Runs CRM sync for all rows. Returns True only if ALL rows complete successfully."""
+    total = len(final_df)
+    success_count = 0
+
+    for index, row in final_df.iterrows():
+        phone = str(row['phone']).strip()
+        if not phone or phone.lower() in ['nan', 'none', '']:
+            success_count += 1
+            continue
+
+        try:
+            if crm_client.check_number(phone):
+                print(f"  Skipping {phone}: Match found in CRM")
+                success_count += 1
+                continue
+
+            if crm_client.create_entry(row):
+                print(f"  Created entry for {row['Company Name']} ({phone})")
+                success_count += 1
+            else:
+                print(f"  Failed to create entry for {row['Company Name']} ({phone})")
+
+        except Exception as e:
+            print(f"  Error syncing row {index} ({phone}): {e}")
+
+    return success_count == total
+
 def clean_company_name(name: str) -> str:
     """
     Trims the company name and removes all characters following (and including) 
@@ -110,8 +164,10 @@ def main_with_args(args):
     master_all_path = root_dir / 'all.csv'
     master_rejects_path = root_dir / 'rejects.csv'
     tracker_path = root_dir / 'processed_files.txt'
+    synced_tracker_path = root_dir / 'synced_files.txt'
     
     tracker = FileTracker(tracker_path)
+    synced_tracker = SyncedFileTracker(synced_tracker_path)
     
     # Columns requested for Master / Rejects archive
     log_cols =['link', 'title', 'category', 'address', 'website', 'phone', 'timezone', 'emails']
@@ -121,7 +177,29 @@ def main_with_args(args):
     phone_pattern = r'^(?:\+88)?01\d{3}-?\d{6}$'
 
     for filepath in get_input_files(unprocessed_dir):
-        if tracker.is_processed(filepath.name):
+        filename = filepath.name
+        
+        if synced_tracker.is_synced(filename):
+            print(f"Skipping {filename}: already cleaned and fully synced")
+            continue
+        
+        crm_enabled = hasattr(args, 'crm') and args.crm
+        
+        if tracker.is_processed(filename):
+            if not crm_enabled:
+                print(f"Skipping {filename}: already processed (use --crm to sync)")
+                continue
+            print(f"Resuming CRM sync for {filename}...")
+            final_df = pd.read_csv(processed_dir / filename)
+            
+            if crm_enabled:
+                crm_client = CRMClient(args.url, args.type, args.sentby)
+                sync_success = run_crm_sync(final_df, crm_client)
+                if sync_success:
+                    synced_tracker.add_synced(filename)
+                    print(f"CRM sync complete for {filename}.")
+                else:
+                    print(f"CRM sync incomplete for {filename}. Will retry on next run.")
             continue
             
         try:
@@ -217,32 +295,17 @@ def main_with_args(args):
         # ---------------------------------------------------------
         # Phase 3: CRM Synchronization (Conditional)
         # ---------------------------------------------------------
-        if hasattr(args, 'crm') and args.crm:
+        if crm_enabled:
             crm_client = CRMClient(args.url, args.type, args.sentby)
-            print(f"Starting CRM sync for {filepath.name}...")
+            print(f"Starting CRM sync for {filename}...")
             
-            for index, row in final_df.iterrows():
-                phone = str(row['phone']).strip()
-                if not phone or phone.lower() in ['nan', 'none', '']:
-                    continue
-                
-                try:
-                    # Step A: Check Existing Entry
-                    if crm_client.check_number(phone):
-                        print(f"  Skipping {phone}: Match found in CRM")
-                        continue
-                    
-                    # Step B: Create New Entry
-                    if crm_client.create_entry(row):
-                        print(f"  Created entry for {row['Company Name']} ({phone})")
-                    else:
-                        print(f"  Failed to create entry for {row['Company Name']} ({phone})")
-                        
-                except Exception as e:
-                    print(f"  Error syncing row {index} ({phone}): {e}")
-                    # Resilient: continue to next row
+            sync_success = run_crm_sync(final_df, crm_client)
             
-            print(f"CRM sync complete for {filepath.name}.")
+            if sync_success:
+                synced_tracker.add_synced(filename)
+                print(f"CRM sync complete for {filename}.")
+            else:
+                print(f"CRM sync incomplete for {filename}. Will retry on next run.")
 
 def main():
     # Allow dynamic input folder from command line
