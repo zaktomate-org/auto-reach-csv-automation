@@ -161,20 +161,27 @@ def clean_company_name(name: str) -> str:
     
     original_name = str(name).strip()
     
-    # Combine standard ASCII punctuation (!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~)
-    # with common web Unicode variants (en-dash, em-dash, and various vertical pipes)
     extended_punctuation = (
         string.punctuation + "–—│┃｜"
     )
     
-    # Create a safe regex character class
     punct_pattern = r'[' + re.escape(extended_punctuation) + r']'
     
-    # Split on the first occurrence of any punctuation
-    cleaned_name = re.split(punct_pattern, original_name)[0].strip()
+    matches = list(re.finditer(punct_pattern, original_name))
     
-    # Revert to the original name if the trimmed result is 3 characters or shorter (or empty)
-    if len(cleaned_name) <= 3:
+    if not matches:
+        return original_name
+    
+    first_punct_idx = matches[0].start()
+    cleaned_name = original_name[:first_punct_idx].strip()
+    
+    if len(cleaned_name) < 3:
+        if len(matches) > 1:
+            second_punct_idx = matches[1].start()
+            cleaned_name = original_name[:second_punct_idx].strip()
+            if len(cleaned_name) < 3:
+                return original_name
+            return cleaned_name
         return original_name
         
     return cleaned_name
@@ -234,18 +241,25 @@ def main_with_args(args):
             if not crm_enabled:
                 print(f"Skipping {filename}: already processed (use --crm to sync)")
                 continue
-            print(f"Resuming CRM sync for {filename}...")
-            final_df = pandas.read_csv(processed_dir / filename)
             
-            if crm_enabled:
-                crm_client = CRMClient(args.url, args.type, args.sentby, debug=args.debug)
-                sync_success = run_crm_sync(final_df, crm_client)
-                if sync_success:
-                    synced_tracker.add_synced(filename)
-                    print(f"CRM sync complete for {filename}.")
-                else:
-                    print(f"CRM sync incomplete for {filename}. Will retry on next run.")
-            continue
+            processed_file_path = processed_dir / filename
+            if not processed_file_path.exists():
+                print(f"Warning: Processed file missing for {filename}, re-processing...")
+                tracker.processed_files.discard(filename)
+                tracker._save()
+            else:
+                print(f"Resuming CRM sync for {filename}...")
+                final_df = pandas.read_csv(processed_file_path)
+                
+                if crm_enabled:
+                    crm_client = CRMClient(args.url, args.type, args.sentby, debug=args.debug)
+                    sync_success = run_crm_sync(final_df, crm_client)
+                    if sync_success:
+                        synced_tracker.add_synced(filename)
+                        print(f"CRM sync complete for {filename}.")
+                    else:
+                        print(f"CRM sync incomplete for {filename}. Will retry on next run.")
+                continue
             
         try:
             df = pandas.read_csv(filepath, dtype={'phone': str})
@@ -290,9 +304,15 @@ def main_with_args(args):
         valid_phone = phone_series.str.match(PHONE_PATTERN)
         valid_timezone = df['timezone'] == 'Asia/Dhaka'
         
+        # Website check - must have valid website if phone/timezone matched
+        website_series = df['website'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
+        website_is_empty = df['website'].isna() | website_series.str.lower().isin(['', 'nan', 'none', '<na>'])
+        has_valid_website = ~website_is_empty
+        
         # Sequential Logic Application:
-        # Keep row if Phone is Valid OR (Phone is strictly empty AND Timezone is valid)
-        is_valid = valid_phone | (phone_is_empty & valid_timezone)
+        # Keep row if: (Phone is Valid OR (Phone is strictly empty AND Timezone is valid)) AND has valid website
+        phone_or_timezone_valid = valid_phone | (phone_is_empty & valid_timezone)
+        is_valid = phone_or_timezone_valid & has_valid_website
         
         valid_df = df[is_valid].copy()
         rejects_df = df[~is_valid].copy()
@@ -314,6 +334,9 @@ def main_with_args(args):
 
         # Clean Company Name
         valid_df['Company Name'] = valid_df['Company Name'].apply(clean_company_name)
+        
+        # Fill empty company names with "not available"
+        valid_df['Company Name'] = valid_df['Company Name'].replace(['', 'nan', 'None', '<NA>'], 'not available')
         
         # Standardize Phone Numbers (Remove dashes and whitespace)
         # We ensure they are strings first.
