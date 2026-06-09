@@ -17,3 +17,9 @@ htmlcov/
 
 # Conductor
 .conductor_cache/
+
+logs/
+
+scraper-api/node_modules/
+
+scraper-api/bin/
