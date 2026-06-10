@@ -12,6 +12,8 @@ from crm_client import CRMClient
 LOG_COLS = ['link', 'title', 'category', 'address', 'website', 'phone',
            'timezone', 'emails']
 PHONE_PATTERN = r'^(?:\+88)?01\d{3}-?\d{6}$'
+REQUIRE_WEBSITE = True
+PHONE_ONLY = True
 
 
 def setup_directories(input_folder: str = 'unprocessed') -> tuple[Path, Path]:
@@ -302,17 +304,22 @@ def main_with_args(args):
         
         # Validation checks
         valid_phone = phone_series.str.match(PHONE_PATTERN)
-        valid_timezone = df['timezone'] == 'Asia/Dhaka'
         
-        # Website check - must have valid website if phone/timezone matched
-        website_series = df['website'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
-        website_is_empty = df['website'].isna() | website_series.str.lower().isin(['', 'nan', 'none', '<na>'])
-        has_valid_website = ~website_is_empty
-        
-        # Sequential Logic Application:
-        # Keep row if: (Phone is Valid OR (Phone is strictly empty AND Timezone is valid)) AND has valid website
-        phone_or_timezone_valid = valid_phone | (phone_is_empty & valid_timezone)
-        is_valid = phone_or_timezone_valid & has_valid_website
+        if PHONE_ONLY:
+            is_valid = valid_phone
+        else:
+            valid_timezone = df['timezone'] == 'Asia/Dhaka'
+            
+            # Website check - controlled by REQUIRE_WEBSITE config
+            if REQUIRE_WEBSITE:
+                website_series = df['website'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
+                website_is_empty = df['website'].isna() | website_series.str.lower().isin(['', 'nan', 'none', '<na>'])
+                has_valid_website = ~website_is_empty
+            else:
+                has_valid_website = pandas.Series(True, index=df.index)
+            
+            phone_or_timezone_valid = valid_phone | (phone_is_empty & valid_timezone)
+            is_valid = phone_or_timezone_valid & has_valid_website
         
         valid_df = df[is_valid].copy()
         rejects_df = df[~is_valid].copy()
@@ -374,6 +381,99 @@ def main_with_args(args):
                 print(f"CRM sync complete for {filename}.")
             else:
                 print(f"CRM sync incomplete for {filename}. Will retry on next run.")
+
+def rescan_rejects(args):
+    """Reprocess rejects.csv with current validation rules.
+    
+    Bypasses FileTracker/SyncedFileTracker entirely.
+    Reads rejects.csv, revalidates, outputs to processed/rejects_rescan.csv,
+    and updates rejects.csv with only still-invalid rows.
+    """
+    root_dir = Path.cwd()
+    rejects_path = root_dir / 'rejects.csv'
+    processed_dir = root_dir / 'processed'
+    rescan_output_path = processed_dir / 'rejects_rescan.csv'
+
+    if not rejects_path.exists():
+        print("No rejects.csv found. Nothing to rescan.")
+        return
+
+    df = pandas.read_csv(rejects_path, dtype={'phone': str})
+    if df.empty:
+        print("rejects.csv is empty. Nothing to rescan.")
+        return
+
+    print(f"Rescanning {len(df)} rejected leads...")
+
+    for col in LOG_COLS:
+        if col not in df.columns:
+            df[col] = pandas.NA
+
+    # Same validation logic as main_with_args
+    phone_series = df['phone'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
+    phone_is_empty = df['phone'].isna() | phone_series.str.lower().isin(['', 'nan', 'none', '<na>'])
+    valid_phone = phone_series.str.match(PHONE_PATTERN)
+
+    if PHONE_ONLY:
+        is_valid = valid_phone
+    else:
+        valid_timezone = df['timezone'] == 'Asia/Dhaka'
+
+        if REQUIRE_WEBSITE:
+            website_series = df['website'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
+            website_is_empty = df['website'].isna() | website_series.str.lower().isin(['', 'nan', 'none', '<na>'])
+            has_valid_website = ~website_is_empty
+        else:
+            has_valid_website = pandas.Series(True, index=df.index)
+
+        phone_or_timezone_valid = valid_phone | (phone_is_empty & valid_timezone)
+        is_valid = phone_or_timezone_valid & has_valid_website
+
+    valid_df = df[is_valid].copy()
+    still_rejected_df = df[~is_valid].copy()
+
+    # Transform valid leads (same as main pipeline)
+    if not valid_df.empty:
+        if 'title' in valid_df.columns:
+            valid_df = valid_df.rename(columns={'title': 'Company Name'})
+        else:
+            valid_df['Company Name'] = ''
+
+        valid_df['Company Name'] = valid_df['Company Name'].apply(clean_company_name)
+        valid_df['Company Name'] = valid_df['Company Name'].replace(['', 'nan', 'None', '<NA>'], 'not available')
+
+        valid_df['phone'] = valid_df['phone'].astype(str).str.strip().str.replace(r'[\s\-]+', '', regex=True)
+        valid_df['phone'] = valid_df['phone'].replace(['nan', 'None', '<NA>'], '')
+
+        for out_col in ['Company Name', 'phone', 'website']:
+            if out_col not in valid_df.columns:
+                valid_df[out_col] = ''
+
+        final_df = valid_df[['Company Name', 'phone', 'website']]
+
+        processed_dir.mkdir(exist_ok=True)
+        final_df.to_csv(rescan_output_path, index=False)
+        print(f"Rescan complete: {len(final_df)} leads recovered -> processed/rejects_rescan.csv")
+
+        if hasattr(args, 'crm') and args.crm:
+            crm_client = CRMClient(args.url, args.type, args.sentby, debug=args.debug)
+            print("Starting CRM sync for rescan results...")
+            sync_success = run_crm_sync(final_df, crm_client)
+            if sync_success:
+                print("CRM sync complete for rescan results.")
+            else:
+                print("CRM sync incomplete for rescan results.")
+    else:
+        print("No leads recovered from rejects.")
+
+    # Update rejects.csv with only still-invalid rows
+    if not still_rejected_df.empty:
+        still_rejected_df[LOG_COLS].to_csv(rejects_path, index=False)
+        print(f"{len(still_rejected_df)} leads remain rejected in rejects.csv")
+    else:
+        # All leads recovered - clear rejects
+        pandas.DataFrame(columns=LOG_COLS).to_csv(rejects_path, index=False)
+        print("All rejected leads recovered. rejects.csv cleared.")
 
 def main():
     # Allow dynamic input folder from command line

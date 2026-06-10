@@ -34,6 +34,10 @@ def parse_args(args):
         "--debug", action="store_true",
         help="Enable debug mode to show full request/response on errors."
     )
+    parser.add_argument(
+        "--rescan-rejects", action="store_true",
+        help="Rescan rejects.csv with current validation rules and output to processed/rejects_rescan.csv."
+    )
     
     parsed_args = parser.parse_args(args)
     
@@ -58,7 +62,10 @@ def parse_args(args):
 def main():
     """Main entry point."""
     args = parse_args(sys.argv[1:])
-    cleaner.main_with_args(args)
+    if hasattr(args, 'rescan_rejects') and args.rescan_rejects:
+        cleaner.rescan_rejects(args)
+    else:
+        cleaner.main_with_args(args)
 
 if __name__ == "__main__":
     main()
